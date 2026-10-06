@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local Airflow files and downloaded data
+/logs/
+/data/
+/config/
