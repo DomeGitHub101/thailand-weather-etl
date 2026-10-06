@@ -97,25 +97,61 @@ def weather_pipeline():
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT COUNT(*)
+                    SELECT
+                        observed_at,
+                        temperature_c,
+                        relative_humidity_pct,
+                        precipitation_mm
                     FROM weather_hourly
                     WHERE city_code = %s
                       AND observed_at >= %s
                       AND observed_at < %s
+                    ORDER BY observed_at
                     """,
                     (CITY_CODE, start, end),
                 )
-                actual_count = cursor.fetchone()[0]
+                rows = cursor.fetchall()
 
-        if processed_count != 24 or actual_count != 24:
+        if processed_count != 24 or len(rows) != 24:
             raise ValueError(
                 f"Expected 24 records: processed={processed_count}, "
-                f"stored={actual_count}"
+                f"stored={len(rows)}"
             )
 
+        expected_times = {
+            start.add(hours=hour)
+            for hour in range(24)
+        }
+        actual_times = {row[0] for row in rows}
+
+        if actual_times != expected_times:
+            raise ValueError(
+                "Hourly timestamps are missing or misaligned"
+            )
+
+        for observed_at, temperature, humidity, rain in rows:
+            if any(
+                value is None
+                for value in (temperature, humidity, rain)
+            ):
+                raise ValueError(
+                    f"Missing weather value at {observed_at}"
+                )
+
+            if not 0 <= humidity <= 100:
+                raise ValueError(
+                    f"Invalid humidity at {observed_at}: {humidity}"
+                )
+
+            if rain < 0:
+                raise ValueError(
+                    f"Negative precipitation at {observed_at}: {rain}"
+                )
+
         print(
-            f"Validation passed: {actual_count} rows "
-            f"for {CITY_CODE} on {TARGET_DATE}"
+            f"Validation passed: {CITY_CODE} on {TARGET_DATE}; "
+            "24 hourly timestamps, no missing values, "
+            "humidity and precipitation checks passed"
         )
 
     raw_data = extract_weather()
